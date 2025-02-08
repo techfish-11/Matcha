@@ -81,7 +81,7 @@ async fn handle_request(req: Request<Body>, config: ServerConfig, log_config: Lo
             Response::new(Body::from("404 Not Found"))
         }
     };
-    resp.headers_mut().insert("Server", HeaderValue::from_static("Matcha/0.1"));
+    resp.headers_mut().insert("X-Powered-by", HeaderValue::from_static("Matcha/0.1"));
     log_request(&log_config, &req, resp.status().as_u16());
     Ok(resp)
 }
