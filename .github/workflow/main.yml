@@ -22,13 +22,13 @@ jobs:
         run: cargo build --release
 
       - name: Archive release
-        run: tar -czvf my_project.tar.gz -C target/release my_project
+        run: tar -czvf Matcha.tar.gz -C target/release Matcha
 
       - name: Upload release asset
         uses: actions/upload-artifact@v2
         with:
-          name: my_project
-          path: my_project.tar.gz
+          name: Matcha
+          path: Matcha.tar.gz
 
   release:
     needs: build
@@ -38,7 +38,7 @@ jobs:
       - name: Download release asset
         uses: actions/download-artifact@v2
         with:
-          name: my_project
+          name: Matcha
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
@@ -53,11 +53,11 @@ jobs:
           prerelease: false
 
       - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+        uses: actions/upload-release-asset@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./my_project.tar.gz
-          asset_name: my_project.tar.gz
+          asset_path: ./Matcha.tar.gz
+          asset_name: Matcha.tar.gz
           asset_content_type: application/gzip
