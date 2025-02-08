@@ -7,10 +7,14 @@ use std::path::Path;
 use toml;
 use hyper::header::HeaderValue;
 use serde::Deserialize;
+use std::fs::OpenOptions;
+use std::io::Write;
+use chrono::Local;
 
 #[derive(Debug, Deserialize, Clone)]
 struct Config {
     server: ServerConfig,
+    log: LogConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -21,13 +25,43 @@ struct ServerConfig {
     index_file: String,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct LogConfig {
+    log_path: String,
+    log_format: String,
+}
+
 fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
     let config_contents = fs::read_to_string("matcha.conf")?;
     let config: Config = toml::de::from_str(&config_contents)?;
     Ok(config)
 }
 
-async fn handle_request(req: Request<Body>, config: ServerConfig) -> Result<Response<Body>, hyper::Error> {
+fn log_request(log_config: &LogConfig, req: &Request<Body>, status: u16) {
+    let log_path = &log_config.log_path;
+    let log_format = &log_config.log_format;
+    let remote_addr = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown");
+    let method = req.method().as_str();
+    let path = req.uri().path();
+    let log_entry = log_format
+        .replace("{remote_addr}", remote_addr)
+        .replace("{method}", method)
+        .replace("{path}", path)
+        .replace("{status}", &status.to_string());
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .unwrap();
+    writeln!(file, "{} - {}", Local::now().format("%Y-%m-%d %H:%M:%S"), log_entry).unwrap();
+}
+
+async fn handle_request(req: Request<Body>, config: ServerConfig, log_config: LogConfig) -> Result<Response<Body>, hyper::Error> {
     let path = req.uri().path();
     let file_path = if path == "/" {
         Path::new(&config.root_dir).join(&config.index_file)
@@ -48,6 +82,7 @@ async fn handle_request(req: Request<Body>, config: ServerConfig) -> Result<Resp
         }
     };
     resp.headers_mut().insert("Server", HeaderValue::from_static("Matcha/0.1"));
+    log_request(&log_config, &req, resp.status().as_u16());
     Ok(resp)
 }
 
@@ -59,10 +94,12 @@ fn main() {
 
         let make_svc = make_service_fn(|_conn| {
             let server_config = config.server.clone();
+            let log_config = config.log.clone();
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |req| {
                     let server_config = server_config.clone();
-                    handle_request(req, server_config)
+                    let log_config = log_config.clone();
+                    handle_request(req, server_config, log_config)
                 }))
             }
         });
